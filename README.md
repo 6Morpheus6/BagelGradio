@@ -106,7 +106,7 @@ snapshot_download(cache_dir=cache_dir,
 
 ```
 
-3️⃣  Go to [`inference.ipynb`](inference.ipynb) to start playing with BAGEL!
+3️⃣  To start playing with BAGEL via the Gradio UI, Windows users can double-click launch_ui.bat. Users on other operating systems can run python ui.py from their terminal.
 
 ## 🔥 Train & Eval
 
