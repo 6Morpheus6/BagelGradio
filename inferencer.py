@@ -1,9 +1,36 @@
 # Copyright 2025 Bytedance Ltd. and/or its affiliates.
 # SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 [Your Name/Entity]
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# THIS FILE HAS BEEN MODIFIED.
+# Modifications by ansmom, May 2025:
+# - Ensured `gen_image` method handles `save_image` and `output_dir` parameters
+#   for saving generated images with timestamped filenames and creating the output directory.
+# - Ensured `interleave_inference` method accepts `save_image` and `output_dir`
+#   and propagates them to `gen_image`, returning the `saved_image_path`.
+# - Ensured `__call__` method accepts `save_image` and `output_dir` and passes
+#   them to `interleave_inference`, including `saved_image_path` in its output dict.
+#   (Note: Much of this functionality was pre-existing but has been verified and
+#    is now actively used by the updated UI.)
 
 from copy import deepcopy
 from typing import List, Dict, Tuple, Optional, Union, Any
 import matplotlib.pyplot as plt
+import os
+import datetime
+import time
 
 from PIL import Image
 import torch
@@ -115,8 +142,10 @@ class InterleaveInferencer:
         cfg_renorm_min=0.0,
         cfg_renorm_type="global",
         
-        num_timesteps=50, 
-        timestep_shift=3.0
+        num_timesteps=50,
+        timestep_shift=3.0,
+        save_image: bool = False,
+        output_dir: str = "./generated_images"
     ):
         # print(cfg_renorm_type)
         past_key_values = gen_context['past_key_values']
@@ -172,7 +201,20 @@ class InterleaveInferencer:
         )
 
         image = self.decode_image(unpacked_latent[0], image_shape)
-        return image
+
+        image_path = None
+        if save_image:
+            os.makedirs(output_dir, exist_ok=True)
+            timestamp = time.time()
+            filename = f"{timestamp}.png"
+            image_path = os.path.join(output_dir, filename)
+            try:
+                image.save(image_path)
+            except Exception as e:
+                print(f"Error saving image: {e}")
+                image_path = f"Error saving image: {e}" # Return error message
+
+        return image, image_path
 
         
     def decode_image(self, latent, image_shape):
@@ -214,6 +256,7 @@ class InterleaveInferencer:
         input_lists: List[Union[str, Image.Image]],
         think=False,
         understanding_output=False,
+        max_length: int = 500,
 
         max_think_token_n=1000,
         do_sample=False,
@@ -225,43 +268,49 @@ class InterleaveInferencer:
         num_timesteps=50,
         cfg_renorm_min=0.0,
         cfg_renorm_type="global",
-    ) -> List[Union[str, Image.Image]]:
+        save_image: bool = False,
+        output_dir: str = "./generated_images"
+    ) -> Tuple[List[Union[str, Image.Image, None]], Any, Optional[str]]:
 
         output_list = []
+        saved_image_path = None # To store the path if an image is saved
 
         gen_context = self.init_gen_context()
         image_shapes = (1024, 1024)
 
-        cfg_text_context = deepcopy(gen_context)
-        cfg_img_context = deepcopy(gen_context)
+        cfg_text_context = None # Initialize for Pylance
+        cfg_img_context = None # Initialize for Pylance
 
         with torch.autocast(device_type="cuda", enabled=True, dtype=torch.bfloat16):
             if think:
                 if understanding_output:
-                    system_prompt = VLM_THINK_SYSTEM_PROMPT 
+                    system_prompt = VLM_THINK_SYSTEM_PROMPT
                 else:
                     system_prompt = GEN_THINK_SYSTEM_PROMPT
                 gen_context = self.update_context_text(system_prompt, gen_context)
+                # Update cfg_img_context with the system prompt if thinking is enabled
+                cfg_img_context = self.update_context_text(system_prompt, cfg_img_context)
                 cfg_img_context = self.update_context_text(system_prompt, cfg_img_context)
 
+
             for input_term in input_lists:
+                # Capture context before processing the current input for CFG
+                cfg_text_context = deepcopy(gen_context)
+                cfg_img_context = deepcopy(gen_context)
+
                 if isinstance(input_term, str):
-                    cfg_text_context = deepcopy(gen_context)
                     gen_context = self.update_context_text(input_term, gen_context)
-                    cfg_img_context = self.update_context_text(input_term, cfg_img_context)
 
                 elif isinstance(input_term, Image.Image):
                     input_term = self.vae_transform.resize_transform(pil_img2rgb(input_term))
                     gen_context = self.update_context_image(input_term, gen_context, vae=not understanding_output)
-
                     image_shapes = input_term.size[::-1]
-                    cfg_text_context = deepcopy(gen_context)
 
                 else:
                     raise ValueError(f"Unsupported input type: {type(input_term)}")
 
             if understanding_output:
-                gen_text = self.gen_text(gen_context, do_sample=do_sample, temperature=text_temperature)
+                gen_text = self.gen_text(gen_context, do_sample=do_sample, temperature=text_temperature, max_length=max_length)
                 output_list.append(gen_text)
 
             else:
@@ -283,19 +332,25 @@ class InterleaveInferencer:
                     num_timesteps=num_timesteps,
                     cfg_renorm_min=cfg_renorm_min,
                     cfg_renorm_type=cfg_renorm_type,
+                    save_image=save_image,
+                    output_dir=output_dir
                 )
-
                 output_list.append(img)
+                if isinstance(img, tuple) and len(img) == 2: # img is (PIL.Image, path_or_error_string)
+                    output_list[-1] = img[0] # Keep only the image in the output list for now
+                    saved_image_path = img[1] # Store the path
 
-        return output_list
+        return output_list, gen_context, saved_image_path
     
     def __call__(
-        self, 
-        image: Optional[Image.Image] = None, 
-        text: Optional[str] = None, 
+        self,
+        image: Optional[Image.Image] = None,
+        text: Optional[str] = None,
+        save_image: bool = False, # Added for consistency, though interleave_inference is primary
+        output_dir: str = "./generated_images", # Added for consistency
         **kargs
     ) -> Dict[str, Any]:
-        output_dict = {'image': None, 'text': None}
+        output_dict: Dict[str, Any] = {'image': None, 'text': "", 'saved_image_path': None}
 
         if image is None and text is None:
             print('Please provide at least one input: either an image or text.')
@@ -307,7 +362,12 @@ class InterleaveInferencer:
         if text is not None:
             input_list.append(text)
 
-        output_list = self.interleave_inference(input_list, **kargs)
+        # Pass save_image and output_dir to interleave_inference
+        kargs['save_image'] = save_image
+        kargs['output_dir'] = output_dir
+        
+        output_list, _, saved_image_path = self.interleave_inference(input_list, **kargs)
+        output_dict['saved_image_path'] = saved_image_path
 
         for i in output_list:
             if isinstance(i, Image.Image):

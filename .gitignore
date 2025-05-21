@@ -8,3 +8,8 @@ results
 eval_results
 tests
 .DS_Store
+models/
+offload_data/
+*.pyc
+*.log
+generated_images/

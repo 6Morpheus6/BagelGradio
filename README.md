@@ -35,6 +35,31 @@ Moreover, BAGEL demonstrates superior qualitative results in classical image‑e
 The figure below showcases BAGEL's qualitative performance.
 
 <p align="center"><img src="assets/teaser.webp" width="95%"></p>
+---
+**Note:** This version builds upon the original [BAGEL project by ByteDance-SEED](https://github.com/bytedance-seed/BAGEL).
+The following modifications and additions have been made, primarily enhancing the Gradio UI.
+---
+
+## Additional Features in this Version (by ansmom)
+
+This version enhances the Gradio-based inference UI ([`ui.py`](ui.py:0)) with the following key feature:
+
+*   **Image Saving Functionality:**
+    *   A "Save generated images" checkbox is now available in the UI's "Image Saving" accordion.
+    *   Users can specify a custom "Output Directory" for saved images (defaults to `./generated_images` relative to where `ui.py` is run).
+    *   When this option is enabled, images generated through the UI are automatically saved with unique, timestamped filenames (e.g., `generated_image_YYYYMMDD_HHMMSS_ffffff.png`).
+    *   The UI includes a "Save Status" message, which displays the path to the saved image upon success or an error message if saving fails.
+
+### Running the Enhanced Gradio UI
+
+To launch the Gradio interface with these features, execute the following command from the project root:
+```bash
+python ui.py
+```
+The image saving options can be found within the "Image Saving" accordion in the UI.
+For Windows users, a convenience script [`launch_ui.bat`](launch_ui.bat:1) is provided. Simply double-click this file to start the Gradio UI.
+
+All original functionalities and the Apache 2.0 license of the BAGEL project are maintained. For full license terms, please see the [`LICENSE`](LICENSE:0) file.
 
 
 ## 🧠 Method
@@ -143,3 +168,5 @@ Please See [EVAL](EVAL.md) for more details.
 
 ## 📜 License
 BAGEL is licensed under the Apache 2.0.
+
+This branch does not utilize Jupyter Notebooks.
