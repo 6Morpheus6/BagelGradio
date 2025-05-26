@@ -31,15 +31,34 @@ import torch
 from PIL import Image
 import sys
 import os
+import argparse
+
+parser = argparse.ArgumentParser(description="BAGEL Interleaved Inference UI")
+parser.add_argument(
+    "--model_folder", "-m",
+    type=str,
+    default=os.environ.get("BAGEL_MODEL_PATH", os.path.join(os.path.dirname(__file__), "ckpt")),
+    help="Pfad zum Modell-Ordner (default: ./ckpt oder ENV VAR BAGEL_MODEL_PATH)"
+)
+parser.add_argument(
+    "--offload_folder", "-o",
+    type=str,
+    default=os.environ.get("BAGEL_OFFLOAD_FOLDER", os.path.join(os.path.dirname(__file__), "offload_data")),
+    help="Pfad zum Offload-Ordner (default: ./offload_data oder ENV VAR BAGEL_OFFLOAD_FOLDER)"
+)
+args = parser.parse_args()
 
 # Add the parent directory to the sys.path to import app and inferencer
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+os.makedirs(args.offload_folder, exist_ok=True)
+
+os.environ["BAGEL_MODEL_PATH"] = args.model_folder
+
 from app import load_model
-from inferencer import InterleaveInferencer
 
 # Load the model and inferencer
-inferencer = load_model(offload_folder="./offload_data")
+inferencer = load_model(offload_folder=args.offload_folder)
 
 def run_inference(text_input, image_input, current_context, inference_type, temperature, max_length, cfg_text_scale, cfg_img_scale, cfg_interval_start, cfg_interval_end, num_timesteps, timestep_shift, cfg_renorm_min, cfg_renorm_type):
     # Initialize context if it's the first turn or reset
