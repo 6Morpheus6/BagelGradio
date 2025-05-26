@@ -16,7 +16,7 @@ from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch, init
 from inferencer import InterleaveInferencer
 
 def load_model(offload_folder="./offload_data"):
-    model_path = "D:/AI/BAGEL/models/BAGEL-7B-MoT"
+    model_path = os.environ.get("BAGEL_MODEL_PATH", os.path.join(os.path.dirname(__file__), "ckpt"))
 
     llm_config = Qwen2Config.from_json_file(os.path.join(model_path, "llm_config.json"))
     llm_config.qk_norm = True
